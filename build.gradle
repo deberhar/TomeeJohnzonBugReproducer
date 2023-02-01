@@ -1,0 +1,68 @@
+plugins {
+  id 'ear'
+}
+
+repositories {
+  mavenCentral()
+}
+
+configurations {
+  tomeeServer
+}
+
+dependencies {
+  deploy project(path: ':TomeeJohnzonBugReproducer-war', configuration: 'archives')
+  tomeeServer 'org.apache.tomee:apache-tomee:8.0.14:plus@zip'
+}
+
+ear {
+  deploymentDescriptor {
+    applicationName = "TomeeJohnzonBugReproducer"
+    displayName = "TomeeJohnzonBugReproducer"
+    
+    webModule("TomeeJohnzonBugReproducer-war.war", "/reproducer")
+  }
+}
+
+task unzipTomee(type: Copy) {
+  def zipPath = project.configurations.tomeeServer.find { it.name.startsWith("apache-tomee") }
+  def outDir  = file("${buildDir}/dist")
+  
+  from zipTree(file(zipPath))
+  into outDir
+  eachFile { fcp ->
+    fcp.path = fcp.path.replaceFirst("apache-tomee-plus-[0-9.]+", '')
+    
+    if (fcp.path == 'conf/tomee.xml') {
+      filter { line ->
+        line.replaceFirst('<!-- *<Deployments dir="apps" */> *-->', '<Deployments dir="apps" />')
+      }
+    }
+  }
+  includeEmptyDirs false
+  exclude '**/webapps/docs/**/*'
+  exclude '**/webapps/host-manager/**/*'
+  exclude '**/webapps/manager/**/*'
+  exclude '**/webapps/ROOT/**/*'
+}
+build.dependsOn unzipTomee
+
+task deployEar(type: Copy, dependsOn: [ 'unzipTomee', 'ear' ]) {
+  from file("${buildDir}/libs/TomeeJohnzonBugReproducer.ear")
+  into file("${buildDir}/dist/apps")
+}
+build.dependsOn deployEar
+
+task chmodShellScripts(type:Exec, dependsOn: 'build') {
+  workingDir "${buildDir}/dist/bin"
+  commandLine 'chmod', '+x', 'catalina.sh', 'setclasspath.sh', 'tomee.sh'
+}
+
+task runTomee(type:Exec, dependsOn: [ 'build', 'chmodShellScripts' ]) {
+  group 'Run'
+  description 'Build and run TomEE instance that can reproduce bug'
+  workingDir "${buildDir}/dist/bin"
+  commandLine './catalina.sh', 'run'
+  environment 'JAVA_OPTS', '-Dtomcat.bind.address=127.0.0.1 -Xmx1024m'
+}
+

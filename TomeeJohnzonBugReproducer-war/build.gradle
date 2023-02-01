@@ -1,0 +1,24 @@
+plugins {
+  id 'java'
+  id 'war'
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  compileOnly 'org.apache.tomee:javaee-api:8.0-6'
+  compileOnly 'org.apache.tomee:openejb-cxf-rs:8.0.14'
+}
+
+java {
+  toolchain {
+    languageVersion.set(JavaLanguageVersion.of(8))
+  }
+}
+
+war {
+  webAppDirectory = file('src/main/webapp')
+  from 'src/rootContext'
+}
